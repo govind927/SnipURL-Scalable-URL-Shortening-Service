@@ -1,0 +1,313 @@
+{
+  "info": {
+    "name": "URL Shortener API",
+    "_postman_id": "url-shortener-collection-v1",
+    "description": "Complete API collection for the Scalable URL Shortener Service.\n\nSetup:\n1. Set `base_url` variable to your server (default: http://localhost:8080)\n2. Run requests in order for best experience\n3. After creating a short URL, the `short_code` variable is auto-set",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",   "value": "http://localhost:8080", "type": "string" },
+    { "key": "short_code", "value": "aB3xYz",               "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api","health"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/actuator/health", "host": ["{{base_url}}"], "path": ["actuator","health"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "URL Shortening",
+      "item": [
+        {
+          "name": "Shorten URL (Basic)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.shortCode) {",
+                  "  pm.collectionVariables.set('short_code', json.shortCode);",
+                  "  console.log('short_code set to:', json.shortCode);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has shortUrl', () => pm.expect(json.shortUrl).to.be.a('string'));",
+                  "pm.test('Has shortCode', () => pm.expect(json.shortCode).to.be.a('string'));",
+                  "pm.test('shortCode length >= 6', () => pm.expect(json.shortCode.length).to.be.gte(6));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"longUrl\": \"https://www.google.com/search?q=spring+boot+url+shortener+project\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/shorten", "host": ["{{base_url}}"], "path": ["api","shorten"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Shorten URL (Custom Alias)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Custom alias used', () => pm.expect(json.shortCode).to.eql('my-project'));",
+                  "if (json.shortCode) pm.collectionVariables.set('short_code', json.shortCode);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"longUrl\": \"https://github.com/your-repo\",\n  \"customAlias\": \"my-project\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/shorten", "host": ["{{base_url}}"], "path": ["api","shorten"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Shorten URL (With Expiry)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has expiryTime', () => pm.expect(json.expiryTime).to.not.be.null);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"longUrl\": \"https://example.com/temporary-offer\",\n  \"expiryTime\": \"2025-12-31T23:59:00\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/shorten", "host": ["{{base_url}}"], "path": ["api","shorten"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Shorten URL — Validation Error (no URL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Has error message', () => pm.expect(pm.response.json().message).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/api/shorten", "host": ["{{base_url}}"], "path": ["api","shorten"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Shorten URL — Invalid URL format",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"longUrl\": \"not-a-valid-url\"\n}" },
+            "url": { "raw": "{{base_url}}/api/shorten", "host": ["{{base_url}}"], "path": ["api","shorten"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Redirect",
+      "item": [
+        {
+          "name": "Redirect (follow redirect OFF)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 302', () => pm.response.to.have.status(302));",
+                  "pm.test('Has Location header', () => pm.expect(pm.response.headers.get('Location')).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "protocolProfileBehavior": { "followRedirects": false },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/{{short_code}}", "host": ["{{base_url}}"], "path": ["{{short_code}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Redirect — Invalid Code (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "protocolProfileBehavior": { "followRedirects": false },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/xxxxxx", "host": ["{{base_url}}"], "path": ["xxxxxx"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Get Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has clickCount', () => pm.expect(json.clickCount).to.be.a('number'));",
+                  "pm.test('Has shortCode',  () => pm.expect(json.shortCode).to.be.a('string'));",
+                  "pm.test('Has longUrl',    () => pm.expect(json.longUrl).to.be.a('string'));",
+                  "pm.test('Has isActive',   () => pm.expect(json.isActive).to.be.a('boolean'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/stats/{{short_code}}", "host": ["{{base_url}}"], "path": ["api","stats","{{short_code}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Stats — Not Found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/stats/notexist", "host": ["{{base_url}}"], "path": ["api","stats","notexist"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Delete",
+      "item": [
+        {
+          "name": "Delete (Soft) Short URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/{{short_code}}", "host": ["{{base_url}}"], "path": ["api","{{short_code}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete — Not Found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/xxxxxx", "host": ["{{base_url}}"], "path": ["api","xxxxxx"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

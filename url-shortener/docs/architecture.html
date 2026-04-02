@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>URL Shortener — Architecture Diagram</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+    .subtitle { font-size: 0.875rem; color: #64748b; margin-bottom: 36px; }
+    .diagram-wrap {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 860px;
+    }
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      margin-top: 32px;
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    /* ── Flow sections ─────────────────────────────────────── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      row-gap: 12px;
+      margin-bottom: 12px;
+    }
+    .arrow {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      padding: 0 6px;
+      flex-shrink: 0;
+    }
+    .arrow-down {
+      display: flex;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: #94a3b8;
+      margin: 6px 0;
+    }
+
+    /* ── Boxes ─────────────────────────────────────────────── */
+    .box {
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 130px;
+      text-align: center;
+      align-items: center;
+    }
+    .box .icon { font-size: 1.4rem; margin-bottom: 2px; }
+    .box .name { font-size: 0.82rem; font-weight: 700; }
+    .box .sub  { font-size: 0.7rem; font-weight: 400; opacity: 0.75; }
+
+    .box-client   { background: #eff6ff; color: #1d4ed8; border: 1.5px solid #bfdbfe; }
+    .box-nginx    { background: #f0fdf4; color: #166534; border: 1.5px solid #bbf7d0; }
+    .box-spring   { background: #fef3c7; color: #92400e; border: 1.5px solid #fde68a; }
+    .box-redis    { background: #fef2f2; color: #991b1b; border: 1.5px solid #fecaca; }
+    .box-mysql    { background: #f0f9ff; color: #0c4a6e; border: 1.5px solid #bae6fd; }
+    .box-log      { background: #fdf4ff; color: #6b21a8; border: 1.5px solid #e9d5ff; }
+    .box-aws      { background: #fff7ed; color: #9a3412; border: 1.5px solid #fed7aa; }
+
+    /* ── Cache flow table ──────────────────────────────────── */
+    .cache-flow {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin: 16px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: #334155;
+      line-height: 2;
+    }
+    .hit  { color: #16a34a; font-weight: 700; }
+    .miss { color: #dc2626; font-weight: 700; }
+    .note { color: #7c3aed; font-weight: 700; }
+
+    /* ── API table ─────────────────────────────────────────── */
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      margin: 8px 0;
+    }
+    .api-table th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #f1f5f9;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .api-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #374151;
+      vertical-align: top;
+    }
+    .api-table tr:last-child td { border-bottom: none; }
+    .method {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .post   { background: #dcfce7; color: #166534; }
+    .get    { background: #dbeafe; color: #1e40af; }
+    .delete { background: #fee2e2; color: #991b1b; }
+    .path   { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #4f46e5; }
+
+    /* ── Status code pills ─────────────────────────────────── */
+    .status-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 100px;
+    }
+    .pill-blue   { background: #dbeafe; color: #1e40af; }
+    .pill-green  { background: #dcfce7; color: #166534; }
+    .pill-red    { background: #fee2e2; color: #991b1b; }
+    .pill-orange { background: #fff7ed; color: #9a3412; }
+    .pill-purple { background: #f3e8ff; color: #7e22ce; }
+
+    /* ── Tech legend ───────────────────────────────────────── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔗 URL Shortener — System Architecture</h1>
+  <p class="subtitle">Spring Boot · Redis · MySQL · Nginx · React · AWS / Railway</p>
+
+  <div class="diagram-wrap">
+
+    <!-- ── Request Flow ─────────────────────────────────────── -->
+    <div class="section-label">📡 Request Flow</div>
+
+    <div class="flow">
+      <div class="box box-client">
+        <span class="icon">🌐</span>
+        <span class="name">Client</span>
+        <span class="sub">Browser / Postman</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box box-nginx">
+        <span class="icon">⚙️</span>
+        <span class="name">Nginx</span>
+        <span class="sub">Reverse Proxy / SSL</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box box-spring">
+        <span class="icon">🍃</span>
+        <span class="name">Spring Boot</span>
+        <span class="sub">REST API · Stateless</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box box-redis">
+        <span class="icon">⚡</span>
+        <span class="name">Redis</span>
+        <span class="sub">Cache-Aside · TTL 24h</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box box-mysql">
+        <span class="icon">🗄️</span>
+        <span class="name">MySQL</span>
+        <span class="sub">Source of Truth</span>
+      </div>
+    </div>
+
+    <div class="arrow-down">↓</div>
+
+    <div class="flow">
+      <div style="width: 130px;"></div>
+      <div class="arrow" style="opacity:0">→</div>
+      <div class="box box-log" style="min-width: 180px;">
+        <span class="icon">📊</span>
+        <span class="name">Analytics Engine</span>
+        <span class="sub">url_access_logs table</span>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box box-aws" style="min-width: 150px;">
+        <span class="icon">☁️</span>
+        <span class="name">AWS / Railway</span>
+        <span class="sub">EC2 · RDS · Upstash</span>
+      </div>
+    </div>
+
+    <!-- ── Cache-Aside Flow ──────────────────────────────────── -->
+    <div class="section-label" style="margin-top: 32px;">⚡ Cache-Aside Pattern (Redirect Flow)</div>
+    <div class="cache-flow">
+      GET /{shortCode}<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;├──▶  Redis.get("url:{code}")<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hit">HIT</span> ────▶ Return URL instantly &lt; 1ms<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="miss">MISS</span> ───▶ MySQL.findByShortCode()<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──▶ Validate (active? expired?)<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──▶ Redis.set(key, url, TTL=24h)<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└──▶ Return URL + Log access event<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="note">FAULT TOLERANCE:</span> Redis down? → silently fall through to DB
+    </div>
+
+    <!-- ── API Endpoints ─────────────────────────────────────── -->
+    <div class="section-label">🔌 API Endpoints</div>
+    <table class="api-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Description</th>
+          <th>Status Codes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="path">/api/shorten</td>
+          <td>Create short URL. Supports custom alias + expiry.</td>
+          <td>
+            <div class="status-pills">
+              <span class="pill pill-green">201 Created</span>
+              <span class="pill pill-red">400 Bad Request</span>
+              <span class="pill pill-orange">409 Conflict</span>
+              <span class="pill pill-purple">429 Rate Limit</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/{shortCode}</td>
+          <td>Redirect to original URL. Tracks click + logs access event.</td>
+          <td>
+            <div class="status-pills">
+              <span class="pill pill-blue">302 Found</span>
+              <span class="pill pill-red">404 Not Found</span>
+              <span class="pill pill-orange">410 Gone (expired)</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/api/stats/{code}</td>
+          <td>Analytics: click count, trend chart, geo breakdown, recent clicks.</td>
+          <td>
+            <div class="status-pills">
+              <span class="pill pill-green">200 OK</span>
+              <span class="pill pill-red">404 Not Found</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="method delete">DELETE</span></td>
+          <td class="path">/api/{shortCode}</td>
+          <td>Soft-delete. Preserves analytics. Evicts from Redis cache.</td>
+          <td>
+            <div class="status-pills">
+              <span class="pill pill-blue">204 No Content</span>
+              <span class="pill pill-red">404 Not Found</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ── Database Design ───────────────────────────────────── -->
+    <div class="section-label">🗄️ Database Design</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+        <div style="font-size: 0.78rem; font-weight: 700; color: #0f172a; margin-bottom: 10px;">📋 urls</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #475569; line-height: 2;">
+          id          BIGINT PK AUTO_INCREMENT<br/>
+          long_url    TEXT NOT NULL<br/>
+          short_code  VARCHAR(50) UNIQUE <span style="color:#6366f1">← indexed</span><br/>
+          created_at  DATETIME<br/>
+          expiry_time DATETIME NULL<br/>
+          click_count BIGINT DEFAULT 0<br/>
+          is_active   BOOLEAN DEFAULT TRUE<br/>
+          creator_ip  VARCHAR(45)
+        </div>
+      </div>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+        <div style="font-size: 0.78rem; font-weight: 700; color: #0f172a; margin-bottom: 10px;">📋 url_access_logs</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #475569; line-height: 2;">
+          id          BIGINT PK<br/>
+          short_code  VARCHAR(50) <span style="color:#6366f1">← indexed</span><br/>
+          accessed_at DATETIME <span style="color:#6366f1">← indexed</span><br/>
+          ip_address  VARCHAR(45)<br/>
+          user_agent  VARCHAR(512)<br/>
+          country     VARCHAR(100)<br/>
+          city        VARCHAR(100)
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Zero Cost Deployment ──────────────────────────────── -->
+    <div class="section-label">💸 Zero-Cost Deployment Map</div>
+    <table class="api-table">
+      <thead>
+        <tr><th>AWS Component</th><th>Free Alternative</th><th>Why It Mirrors</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>EC2 (compute)</td>
+          <td><strong>Railway / Render</strong></td>
+          <td>Runs Spring Boot JAR, same deployment model</td>
+        </tr>
+        <tr>
+          <td>RDS MySQL</td>
+          <td><strong>PlanetScale / Railway MySQL</strong></td>
+          <td>Managed MySQL, free tier, same JDBC config</td>
+        </tr>
+        <tr>
+          <td>ElastiCache Redis</td>
+          <td><strong>Upstash Redis</strong></td>
+          <td>Same Redis API, free 10K req/day</td>
+        </tr>
+        <tr>
+          <td>ALB / Nginx</td>
+          <td><strong>Platform built-in proxy</strong></td>
+          <td>Same reverse proxy concept</td>
+        </tr>
+        <tr>
+          <td>CloudWatch</td>
+          <td><strong>Spring Actuator + Render Logs</strong></td>
+          <td>Health endpoints + live log streaming</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ── Legend ────────────────────────────────────────────── -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Client</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Nginx</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Spring Boot</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Redis Cache</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9"></div>MySQL DB</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Analytics</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Cloud / AWS</div>
+    </div>
+
+  </div>
+</body>
+</html>

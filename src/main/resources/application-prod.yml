@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────
+# PRODUCTION PROFILE
+# Activate with: --spring.profiles.active=prod
+# All secrets injected via environment variables.
+# Works with: Railway, Render, AWS EC2, any cloud provider.
+# ─────────────────────────────────────────────────────────
+
+spring:
+  datasource:
+    url: ${DATABASE_URL}                    # jdbc:mysql://host:3306/dbname
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      ddl-auto: validate                    # NEVER use 'update' in production
+    show-sql: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}                   # Upstash endpoint
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true                       # Upstash requires SSL
+
+app:
+  base-url: ${APP_BASE_URL}                 # e.g. https://yourdomain.railway.app
+  cache:
+    ttl-hours: ${CACHE_TTL_HOURS:24}
+  rate-limit:
+    max-requests: ${RATE_LIMIT_MAX:20}
+    window-minutes: ${RATE_LIMIT_WINDOW:1}
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    com.urlshortener: INFO
+    root: WARN

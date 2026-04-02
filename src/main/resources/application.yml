@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: url-shortener
+
+  # ── Database ───────────────────────────────────────────
+  datasource:
+    url: jdbc:mysql://localhost:3307/url_shortener?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+
+  # ── JPA ────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: update         # use 'validate' in production
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # ── Redis ──────────────────────────────────────────────
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      # password:             # uncomment if Redis has auth (Upstash requires this)
+
+# ── App Custom Config ──────────────────────────────────
+app:
+  base-url: http://localhost:8080
+  cache:
+    ttl-hours: 24              # how long short codes live in Redis
+  rate-limit:
+    max-requests: 10           # max requests per IP per window
+    window-minutes: 1          # rolling window size
+  snowflake:
+    machine-id: 1              # unique per instance (0-1023)
+
+# ── Server ─────────────────────────────────────────────
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# ── Actuator ───────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ── Logging ────────────────────────────────────────────
+logging:
+  level:
+    com.urlshortener: DEBUG
+    org.springframework.data.redis: WARN
+
+# ── JWT ────────────────────────────────────────────────
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  expiration-ms: 86400000   # 24 hours in milliseconds
