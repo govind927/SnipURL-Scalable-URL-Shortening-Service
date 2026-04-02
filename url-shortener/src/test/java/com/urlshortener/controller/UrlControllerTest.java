@@ -6,8 +6,11 @@ import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.dto.UrlStatsResponse;
 import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
+import com.urlshortener.security.JwtAuthFilter;
+import com.urlshortener.security.JwtService;
 import com.urlshortener.service.RateLimitService;
 import com.urlshortener.service.UrlService;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,9 @@ class UrlControllerTest {
 
     @MockBean  private UrlService       urlService;
     @MockBean  private RateLimitService rateLimitService;
+    @MockBean  private JwtService       jwtService;
+    @MockBean  private JwtAuthFilter    jwtAuthFilter;
+    @MockBean  private UserDetailsService userDetailsService;
 
     // ════════════════════════════════════════════════════════════════
     //  POST /api/shorten
