@@ -1,0 +1,73 @@
+@startuml Database_ER_Diagram
+!theme blueprint
+title URL Shortener — Database Schema (ER Diagram)
+
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #f0f4ff
+    BorderColor #6366f1
+    HeaderBackgroundColor #6366f1
+    HeaderFontColor white
+}
+
+entity "users" as USERS {
+    * **id** : BIGINT (PK, AUTO_INCREMENT)
+    --
+    * email : VARCHAR(100) UNIQUE INDEX
+    * password : VARCHAR(255) (BCrypt)
+    * name : VARCHAR(50)
+    * created_at : DATETIME
+    * is_active : BOOLEAN DEFAULT TRUE
+}
+
+entity "urls" as URLS {
+    * **id** : BIGINT (PK, AUTO_INCREMENT)
+    --
+    * long_url : TEXT (max 2048)
+    * short_code : VARCHAR(50) UNIQUE INDEX
+    * created_at : DATETIME
+    o expiry_time : DATETIME (nullable)
+    * click_count : BIGINT DEFAULT 0
+    * is_active : BOOLEAN DEFAULT TRUE
+    o custom_alias : VARCHAR(50)
+    o creator_ip : VARCHAR(45)
+    o user_id : BIGINT (FK → users.id, nullable)
+}
+
+entity "url_access_logs" as LOGS {
+    * **id** : BIGINT (PK, AUTO_INCREMENT)
+    --
+    * short_code : VARCHAR(50) INDEX
+    * accessed_at : DATETIME INDEX
+    o ip_address : VARCHAR(45)
+    o user_agent : VARCHAR(512)
+    o country : VARCHAR(100)
+    o city : VARCHAR(100)
+}
+
+' Relationships
+USERS ||--o{ URLS : "owns\n(user_id FK, nullable\nanon URLs have null)"
+URLS ||--o{ LOGS : "tracked by\n(via short_code\nnot FK — preserves\nhistory on delete)"
+
+note right of URLS
+  short_code has UNIQUE INDEX
+  for O(1) lookup speed.
+  Encoded from auto-increment
+  id using Base62 algorithm.
+end note
+
+note right of LOGS
+  Separate from urls.click_count.
+  click_count = fast summary counter
+  url_access_logs = full event data
+  for trend charts and geo analytics.
+end note
+
+note bottom of USERS
+  Passwords stored as BCrypt hash.
+  Plain text never stored or logged.
+  user_id on urls is nullable —
+  anonymous users can shorten URLs.
+end note
+
+@enduml

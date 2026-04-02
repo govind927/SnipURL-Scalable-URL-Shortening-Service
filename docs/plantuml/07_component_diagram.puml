@@ -1,0 +1,116 @@
+@startuml Component_Diagram
+!theme blueprint
+title URL Shortener — Component Diagram
+
+skinparam componentBackgroundColor #f0f4ff
+skinparam componentBorderColor #6366f1
+skinparam packageBackgroundColor #fafafa
+skinparam packageBorderColor #e2e8f0
+
+package "Frontend (React :3000)" {
+    component [App.jsx\nRouting + Auth State] as APP
+    component [ShortenForm\nURL Input + QR] as SF
+    component [AnalyticsDashboard\nCharts + Stats] as AD
+    component [Dashboard\nUser Links Table] as DASH
+    component [AuthPage\nLogin + Register] as AUTHP
+    component [PreviewPage\nCountdown Redirect] as PREV
+    component [api.js\nHTTP Client + JWT] as APIJS
+}
+
+package "Backend (Spring Boot :8080)" {
+
+    package "Controller Layer" {
+        component [UrlController\nPOST /api/shorten\nGET /{code}] as UC
+        component [AuthController\nPOST /api/auth/*] as AC
+        component [DashboardController\nGET /api/my-urls] as DC
+        component [PreviewController\nGET /api/preview\nGET /api/qr] as PC
+    }
+
+    package "Security Layer" {
+        component [JwtAuthFilter\nreads Bearer token] as JAF
+        component [SecurityConfig\npublic vs protected] as SC
+        component [JwtService\ngenerate + validate] as JS
+    }
+
+    package "Service Layer" {
+        component [UrlService\ncore business logic] as US
+        component [AuthService\nregister + login] as AS
+        component [DashboardService\nuser's links] as DS
+        component [RateLimitService\nRedis counter] as RL
+        component [GeoLocationService\nip-api.com] as GEO
+        component [QrCodeService\nZXing PNG] as QRS
+        component [LinkPreviewService\nJsoup og:scraper] as LPS
+        component [UrlCleanupService\n@Scheduled cleanup] as CS
+    }
+
+    package "Utility Layer" {
+        component [Base62Encoder\nID → short code] as B62
+        component [SnowflakeIdGenerator\ndistributed IDs] as SFG
+    }
+
+    package "Repository Layer" {
+        component [UrlRepository\nJPA + custom queries] as UR
+        component [UrlAccessLogRepository\nanalytics queries] as UALR
+        component [UserRepository\nfindByEmail] as USR
+    }
+}
+
+package "Infrastructure (Docker)" {
+    database "MySQL :3307\nurls\nurl_access_logs\nusers" as MYSQL
+    database "Redis :6379\ncache + rate limits" as REDIS
+}
+
+cloud "External APIs" {
+    component [ip-api.com\nGeo lookup] as IPAPI
+    component "Destination URLs\n(og: metadata)" as DEST
+}
+
+' Frontend connections
+APP --> SF
+APP --> AD
+APP --> DASH
+APP --> AUTHP
+APP --> PREV
+SF --> APIJS
+AD --> APIJS
+DASH --> APIJS
+AUTHP --> APIJS
+PREV --> APIJS
+
+' API to Controllers
+APIJS --> UC : REST calls
+APIJS --> AC : REST calls
+APIJS --> DC : REST calls (JWT)
+APIJS --> PC : REST calls
+
+' Security
+JAF --> JS : validate token
+JAF --> SC : check permissions
+
+' Controllers to Services
+UC --> US
+AC --> AS
+DC --> DS
+PC --> QRS
+PC --> LPS
+
+' Services
+US --> RL : rate check
+US --> GEO : ip lookup
+US --> B62 : encode ID
+DS --> USR : find user
+GEO --> IPAPI : HTTP call
+LPS --> DEST : Jsoup fetch
+CS --> UR : cleanup expired
+AS --> JS : generate JWT
+
+' Repository to DB
+US --> UR
+US --> UALR
+US --> REDIS : cache-aside
+RL --> REDIS : counters
+UR --> MYSQL
+UALR --> MYSQL
+USR --> MYSQL
+
+@enduml

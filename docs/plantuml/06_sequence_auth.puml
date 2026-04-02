@@ -1,0 +1,79 @@
+@startuml Sequence_Auth
+!theme blueprint
+title URL Shortener — JWT Authentication Sequence
+
+skinparam sequenceArrowColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f0f4ff
+
+actor "User" as USER
+participant "React\nFrontend" as REACT
+participant "AuthController" as CTRL
+participant "AuthService" as SVC
+participant "JwtService" as JWT
+participant "MySQL" as DB
+participant "BCrypt" as BC
+
+== Registration Flow ==
+
+USER -> REACT : fill register form\n(name, email, password)
+REACT -> CTRL : POST /api/auth/register
+CTRL -> SVC : register(request)
+SVC -> DB : existsByEmail(email)?
+DB --> SVC : false (new user)
+SVC -> BC : encode(plainPassword)
+BC --> SVC : "$2a$10$hashedPassword..."
+SVC -> DB : save(User entity)
+DB --> SVC : saved user
+SVC -> JWT : generateToken(userDetails)
+JWT --> SVC : "eyJhbGciOiJIUzI1NiJ9..."
+SVC --> CTRL : AuthResponse{token, email, name}
+CTRL --> REACT : 200 OK + JWT token
+REACT -> REACT : localStorage.setItem('token', jwt)
+REACT --> USER : logged in — navbar shows name
+
+== Login Flow ==
+
+USER -> REACT : fill login form
+REACT -> CTRL : POST /api/auth/login
+CTRL -> SVC : login(request)
+SVC -> DB : findByEmail(email)
+DB --> SVC : User entity
+SVC -> BC : matches(plain, hashed)?
+BC --> SVC : true
+SVC -> JWT : generateToken(userDetails)
+JWT --> SVC : new JWT token (24h expiry)
+SVC --> CTRL : AuthResponse{token, email, name}
+CTRL --> REACT : 200 OK + JWT token
+REACT --> USER : logged in
+
+== Protected Request Flow (Dashboard) ==
+
+USER -> REACT : click Dashboard
+REACT -> REACT : read token from localStorage
+REACT -> CTRL : GET /api/my-urls\nAuthorization: Bearer eyJ...
+
+note over CTRL
+    JwtAuthFilter intercepts
+    every request automatically
+end note
+
+CTRL -> JWT : extractUsername(token)
+JWT --> CTRL : "user@email.com"
+CTRL -> DB : loadUserByUsername(email)
+DB --> CTRL : UserDetails
+CTRL -> JWT : isTokenValid(token, userDetails)
+JWT --> CTRL : true
+CTRL -> CTRL : set SecurityContext authentication
+
+CTRL --> REACT : 200 OK + user's URLs list
+REACT --> USER : dashboard table
+
+== Token Expired ==
+
+REACT -> CTRL : GET /api/my-urls\n(expired token)
+CTRL -> JWT : isTokenValid → false
+CTRL --> REACT : 401 Unauthorized
+REACT -> REACT : clear localStorage\nredirect to login
+REACT --> USER : login page
+
+@enduml

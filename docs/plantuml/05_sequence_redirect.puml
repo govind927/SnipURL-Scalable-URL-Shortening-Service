@@ -1,0 +1,88 @@
+@startuml Sequence_Redirect
+!theme blueprint
+title URL Shortener — Redirect & Cache-Aside Sequence Diagram
+
+skinparam sequenceArrowColor #6366f1
+skinparam sequenceLifeLineBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f0f4ff
+
+actor "User" as USER
+participant "Browser" as BROWSER
+participant "UrlController" as CTRL
+participant "UrlService" as SVC
+participant "Redis\n(Cache)" as REDIS
+participant "MySQL\n(DB)" as DB
+participant "GeoLocationService" as GEO
+participant "ip-api.com" as GEOAPI
+
+USER -> BROWSER : visit localhost:8080/aaaaai
+BROWSER -> CTRL : GET /aaaaai\n(X-Forwarded-For: clientIp)
+
+CTRL -> SVC : getOriginalUrl("aaaaai", ip, userAgent)
+
+SVC -> REDIS : GET "url:aaaaai"
+
+alt CACHE HIT (fast path < 1ms)
+    REDIS --> SVC : "https://www.youtube.com"
+    note right of REDIS
+        No DB query needed.
+        Redis returns instantly.
+    end note
+    SVC -> DB : incrementClickCount("aaaaai") [atomic SQL]
+    SVC -> DB : save(UrlAccessLog)
+    SVC --> CTRL : "https://www.youtube.com"
+
+else CACHE MISS (first visit or TTL expired)
+    REDIS --> SVC : null
+    SVC -> DB : findByShortCode("aaaaai")
+
+    alt Not found
+        DB --> SVC : empty
+        SVC --> CTRL : throw UrlNotFoundException
+        CTRL --> BROWSER : 404 Not Found
+    else Found
+        DB --> SVC : Url entity
+
+        alt Inactive (soft-deleted)
+            SVC --> CTRL : throw UrlNotFoundException
+            CTRL --> BROWSER : 404 Not Found
+        else Expired
+            SVC --> CTRL : throw UrlExpiredException
+            CTRL --> BROWSER : 410 Gone
+        else Valid
+            SVC -> REDIS : SET "url:aaaaai" longUrl TTL=24h
+            REDIS --> SVC : ok
+
+            SVC -> DB : incrementClickCount("aaaaai")
+            SVC -> GEO : lookup(clientIp)
+            GEO -> GEOAPI : GET ip-api.com/json/{ip}
+            GEOAPI --> GEO : {country, city}
+            GEO --> SVC : GeoResult(country, city)
+
+            SVC -> DB : save(UrlAccessLog\nwith ip, ua, country, city)
+            SVC --> CTRL : "https://www.youtube.com"
+        end
+    end
+end
+
+alt Redis down (fault tolerance)
+    REDIS --> SVC : Connection Exception
+    note right of SVC
+        Catch exception silently.
+        Fall through to DB.
+        Service never crashes.
+    end note
+    SVC -> DB : findByShortCode("aaaaai")
+end
+
+CTRL --> BROWSER : 302 Found\nLocation: https://www.youtube.com
+BROWSER --> USER : redirects to YouTube
+
+note over CTRL, BROWSER
+    HTTP 302 (not 301) is intentional.
+    302 = Temporary → browser never caches it.
+    Every click hits our server → accurate analytics.
+    301 = Permanent → browser caches → analytics break.
+end note
+
+@enduml

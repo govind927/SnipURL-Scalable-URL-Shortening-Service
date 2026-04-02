@@ -1,0 +1,64 @@
+@startuml State_URL_Lifecycle
+!theme blueprint
+title URL Shortener — URL Lifecycle State Diagram
+
+skinparam stateBackgroundColor #f0f4ff
+skinparam stateBorderColor #6366f1
+skinparam stateArrowColor #6366f1
+
+[*] --> Created : POST /api/shorten\nBase62 encode + cache
+
+state Created {
+    state "is_active = true\nclick_count = 0\nshortCode set" as C1
+}
+
+Created --> Active : immediately after creation
+
+state Active {
+    state "Serving redirects\nTracking clicks\nCached in Redis" as A1
+}
+
+Active --> Active : GET /{shortCode}\nclick_count++\nlog access event
+
+Active --> Expired : expiryTime < now\n(checked on each request\nOR by scheduled job)
+
+Active --> Deleted : DELETE /api/{shortCode}\nis_active = false\nevict from Redis
+
+state Expired {
+    state "is_active = true\nexpiryTime in past\nreturns 410 Gone" as E1
+}
+
+state Deleted {
+    state "is_active = false\nreturns 404\nRedis key evicted\nanalytics preserved" as D1
+}
+
+Expired --> Cleaned : @Scheduled job\nruns every hour\nbatch soft-delete\nclear Redis keys
+
+state Cleaned {
+    state "is_active = false\nDB record kept\nurl_access_logs kept\nhistory preserved" as CL1
+}
+
+Deleted --> [*] : record stays in DB\nfor analytics history
+Cleaned --> [*] : record stays in DB\nfor analytics history
+
+note right of Active
+    Redis cache TTL = 24h
+    On cache miss → DB query
+    On Redis failure → fallback to DB
+    (fault tolerant)
+end note
+
+note right of Expired
+    HTTP 410 Gone
+    (semantically correct —
+    resource existed but
+    is no longer available)
+end note
+
+note right of Deleted
+    Soft delete — is_active = false
+    Hard delete never used.
+    Analytics data preserved forever.
+end note
+
+@enduml

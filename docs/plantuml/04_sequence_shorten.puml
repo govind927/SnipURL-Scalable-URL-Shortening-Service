@@ -1,0 +1,64 @@
+@startuml Sequence_Shorten
+!theme blueprint
+title URL Shortener — Shorten URL Sequence Diagram
+
+skinparam sequenceArrowColor #6366f1
+skinparam sequenceLifeLineBorderColor #6366f1
+skinparam sequenceParticipantBorderColor #6366f1
+skinparam sequenceParticipantBackgroundColor #f0f4ff
+
+actor "User" as USER
+participant "React\nFrontend" as REACT
+participant "JwtAuthFilter" as JWT
+participant "UrlController" as CTRL
+participant "RateLimitService" as RATE
+participant "UrlService" as SVC
+participant "Base62Encoder" as B62
+participant "MySQL" as DB
+participant "Redis" as REDIS
+
+USER -> REACT : paste URL + click Shorten
+REACT -> CTRL : POST /api/shorten\n{longUrl, alias?, expiry?}\nAuthorization: Bearer <token>
+
+CTRL -> JWT : validate token (if present)
+JWT --> CTRL : authenticated / anonymous
+
+CTRL -> RATE : checkRateLimit(clientIp)
+
+alt Rate limit exceeded
+    RATE --> CTRL : throw RateLimitExceededException
+    CTRL --> REACT : 429 Too Many Requests
+    REACT --> USER : show error message
+else Within limit
+    RATE --> CTRL : ok
+
+    CTRL -> SVC : shortenUrl(request, ip)
+
+    alt Custom alias requested
+        SVC -> DB : existsByShortCode(alias)?
+        alt Alias taken
+            DB --> SVC : true
+            SVC --> CTRL : throw CustomAliasAlreadyExistsException
+            CTRL --> REACT : 409 Conflict
+        else Alias available
+            DB --> SVC : false
+            SVC -> DB : save(Url with alias)
+            DB --> SVC : saved Url
+        end
+    else Auto-generate code
+        SVC -> DB : save(Url without shortCode)
+        DB --> SVC : saved Url with auto-increment id
+        SVC -> B62 : encode(url.id)
+        B62 --> SVC : "aaaaai" (Base62 string)
+        SVC -> DB : update shortCode = "aaaaai"
+    end
+
+    SVC -> REDIS : set("url:aaaaai", longUrl, TTL=24h)
+    REDIS --> SVC : ok
+
+    SVC --> CTRL : UrlResponse
+    CTRL --> REACT : 201 Created\n{shortCode, shortUrl, ...}
+    REACT --> USER : show result box\nwith copy + QR + preview
+end
+
+@enduml

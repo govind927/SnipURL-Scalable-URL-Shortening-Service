@@ -1,0 +1,73 @@
+@startuml System_Architecture
+!theme blueprint
+title URL Shortener — System Architecture
+
+skinparam rectangle {
+    RoundCorner 15
+    BorderColor #6366f1
+    BackgroundColor #f0f4ff
+}
+
+skinparam database {
+    BorderColor #0c4a6e
+    BackgroundColor #e0f2fe
+}
+
+skinparam cloud {
+    BorderColor #166534
+    BackgroundColor #dcfce7
+}
+
+skinparam node {
+    BorderColor #92400e
+    BackgroundColor #fef3c7
+}
+
+actor "User\n(Browser)" as USER
+
+rectangle "Frontend Layer" {
+    rectangle "React App\nlocalhost:3000" as REACT {
+        rectangle "Shorten Page" as SP
+        rectangle "Analytics Page" as AP
+        rectangle "Dashboard Page" as DP
+        rectangle "Preview Page" as PP
+        rectangle "Auth Page" as AUTH
+    }
+}
+
+node "Backend Layer\n(Spring Boot :8080)" as SPRING {
+    rectangle "UrlController" as UC
+    rectangle "AuthController" as AC
+    rectangle "DashboardController" as DC
+    rectangle "PreviewController" as PC
+    rectangle "JwtAuthFilter" as JWT
+    rectangle "UrlService" as US
+    rectangle "RateLimitService" as RL
+    rectangle "GeoLocationService" as GEO
+    rectangle "QrCodeService" as QR
+    rectangle "LinkPreviewService" as LP
+}
+
+database "MySQL :3307\n(Docker)" as MYSQL {
+    rectangle "urls" as T1
+    rectangle "url_access_logs" as T2
+    rectangle "users" as T3
+}
+
+database "Redis :6379\n(Docker)" as REDIS {
+    rectangle "url:{code} cache" as C1
+    rectangle "rate:{ip} counter" as C2
+}
+
+cloud "ip-api.com\n(Geo Lookup)" as GEOAPI
+cloud "External URLs\n(og: metadata)" as OGAPI
+
+USER --> REACT : HTTP requests
+REACT --> SPRING : REST API calls\n(JWT in header)
+JWT --> SPRING : validates token
+SPRING --> MYSQL : JPA queries
+SPRING --> REDIS : cache-aside\nrate limiting
+SPRING --> GEOAPI : IP → country
+SPRING --> OGAPI : Jsoup scraping
+
+@enduml

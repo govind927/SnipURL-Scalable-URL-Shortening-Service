@@ -1,0 +1,136 @@
+@startuml Class_Diagram
+!theme blueprint
+title URL Shortener — Class & Entity Diagram
+
+skinparam classBackgroundColor #f8fafc
+skinparam classBorderColor #6366f1
+skinparam classHeaderBackgroundColor #6366f1
+skinparam classHeaderFontColor white
+skinparam arrowColor #6366f1
+
+' ── Entities ─────────────────────────────────────────
+class User {
+    +Long id
+    +String email
+    +String password (BCrypt)
+    +String name
+    +LocalDateTime createdAt
+    +Boolean isActive
+    --
+    +List<Url> urls
+}
+
+class Url {
+    +Long id
+    +String longUrl
+    +String shortCode (UNIQUE)
+    +LocalDateTime createdAt
+    +LocalDateTime expiryTime
+    +Long clickCount
+    +Boolean isActive
+    +String customAlias
+    +String creatorIp
+    --
+    +User user (FK, nullable)
+}
+
+class UrlAccessLog {
+    +Long id
+    +String shortCode
+    +LocalDateTime accessedAt
+    +String ipAddress
+    +String userAgent
+    +String country
+    +String city
+}
+
+' ── Services ─────────────────────────────────────────
+class UrlService {
+    -UrlRepository urlRepository
+    -RedisTemplate redisTemplate
+    -Base62Encoder encoder
+    -GeoLocationService geoService
+    --
+    +shortenUrl(request, ip): UrlResponse
+    +getOriginalUrl(code, ip, ua): String
+    +getStats(code): UrlStatsResponse
+    +deleteUrl(code): void
+    -cacheUrl(code, url): void
+    -getFromCache(code): String
+    -recordAccess(code, ip, ua): void
+}
+
+class AuthService {
+    -UserRepository userRepository
+    -PasswordEncoder encoder
+    -JwtService jwtService
+    --
+    +register(request): AuthResponse
+    +login(request): AuthResponse
+}
+
+class RateLimitService {
+    -RedisTemplate redisTemplate
+    -int maxRequests
+    -long windowMinutes
+    --
+    +checkRateLimit(ip): void
+    +getRemainingRequests(ip): int
+}
+
+class QrCodeService {
+    +generateQrCode(url): byte[]
+    +generateQrCode(url, size): byte[]
+}
+
+class LinkPreviewService {
+    +fetchPreview(url): LinkPreview
+    -meta(doc, property): String
+    -extractDomain(url): String
+}
+
+class GeoLocationService {
+    +lookup(ip): GeoResult
+    -isPrivateOrLocalIp(ip): boolean
+}
+
+' ── Utilities ────────────────────────────────────────
+class Base62Encoder {
+    -String BASE62_CHARS
+    -int BASE
+    -int MIN_LEN
+    --
+    +encode(id: long): String
+    +decode(code: String): long
+}
+
+class SnowflakeIdGenerator {
+    -long machineId
+    -long lastTimestamp
+    -long sequence
+    --
+    +nextId(): long
+    +decode(id): SnowflakeComponents
+}
+
+class JwtService {
+    -String secretKey
+    -long expirationMs
+    --
+    +generateToken(userDetails): String
+    +isTokenValid(token, userDetails): boolean
+    +extractUsername(token): String
+}
+
+' ── Relationships ─────────────────────────────────────
+User "1" --> "0..*" Url : owns (nullable)
+Url "1" --> "0..*" UrlAccessLog : generates\n(by shortCode)
+
+UrlService --> Base62Encoder : encodes IDs
+UrlService --> GeoLocationService : lookup IP
+UrlService --> RateLimitService : check limits
+AuthService --> JwtService : generate token
+QrCodeService ..> Url : reads longUrl
+LinkPreviewService ..> Url : fetches og data
+
+@enduml
