@@ -1,57 +1,242 @@
-# URL Shortener Service
+# SnipURL — Scalable URL Shortening Service
 
-A high-performance, production-grade URL shortening service built with Java and Spring Boot.
-Converts long URLs into compact, shareable links with sub-millisecond redirect latency via Redis caching.
+![Java](https://img.shields.io/badge/Java-21-orange?style=flat-square)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen?style=flat-square)
+![Redis](https://img.shields.io/badge/Redis-7-red?style=flat-square)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-blue?style=flat-square)
+![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ed?style=flat-square)
+![JWT](https://img.shields.io/badge/Auth-JWT-purple?style=flat-square)
+
+A high-performance, production-grade URL shortening service built with Java and Spring Boot. Converts long URLs into compact, shareable links with sub-millisecond redirect latency via Redis caching, full click analytics, JWT authentication, QR code generation, and link preview pages.
 
 ---
 
-## Architecture
+## Features
 
-```
-Client (Browser / Postman)
-         │
-         ▼
-   [ Nginx / Proxy ]          ← Reverse proxy, rate limiting, SSL
-         │
-         ▼
-  [ Spring Boot API ]         ← Stateless, horizontally scalable
-         │
-    ┌────┴────┐
-    ▼         ▼
- [Redis]   [MySQL]            ← Cache-aside: Redis first, DB fallback
-    │         │
-    └────┬────┘
-         ▼
-  [ Analytics Logs ]          ← Event-level click tracking
-```
+**Core**
+- URL shortening using Base62 encoding from auto-incremented DB IDs — mathematically collision-free
+- Snowflake ID generator for distributed, time-ordered unique ID generation
+- HTTP 302 redirects — intentional, ensures every click is tracked server-side
+- Link expiry with request-time validation and hourly scheduled cleanup
+- Soft delete — preserves analytics history when links are deactivated
+- Custom aliases — users can choose their own short code
 
-**Cache-Aside Flow (Redirect):**
-```
-GET /{shortCode}
-    │
-    ├─► Redis.get("url:{code}")
-    │       │
-    │    HIT ──► Return URL immediately (< 1ms)
-    │       │
-    │    MISS──► MySQL.findByShortCode()
-    │              │
-    │              ├─► Redis.set("url:{code}", ttl=24h)
-    │              └─► Return URL + Log access event
-```
+**Performance**
+- Redis Cache-Aside pattern — hot URLs served in under 1ms without hitting the database
+- Graceful Redis fault tolerance — falls back to MySQL silently if cache is unavailable
+- Atomic SQL click counter — no race conditions under concurrent load
+- Optimized database indexes on `short_code` and `accessed_at`
+
+**Analytics**
+- Event-level click tracking — every redirect stored in `url_access_logs`
+- Geo tracking via ip-api.com — country and city per click
+- 30-day click trend chart, country breakdown, recent clicks table
+- Separate `click_count` summary counter for fast dashboard display
+
+**Security and Auth**
+- JWT authentication — register, login, 24-hour token expiry
+- BCrypt password hashing — plain text never stored
+- Redis-based rate limiting per IP — works across horizontal instances
+- URL validation — must start with http:// or https://
+- IP masking in analytics responses — last octet hidden for privacy
+
+**Advanced**
+- QR code generation — ZXing library, 300x300 PNG, downloadable
+- Link preview page — scrapes og:title, og:image, og:description via Jsoup, 5-second countdown before redirect
+- Spring Actuator — health checks and metrics endpoints
+- Scheduled cleanup — hourly job deactivates expired URLs and evicts Redis keys
 
 ---
 
 ## Tech Stack
 
-| Layer          | Technology              | Free-Tier Alternative     |
-|----------------|-------------------------|---------------------------|
-| Backend        | Java 17 + Spring Boot 3 | —                         |
-| Database       | MySQL 8                 | PlanetScale / Railway MySQL|
-| Cache          | Redis 7                 | Upstash (free 10K req/day)|
-| Reverse Proxy  | Nginx                   | Built-in on Railway/Render|
-| Cloud Compute  | AWS EC2                 | Railway / Render / Fly.io |
-| Monitoring     | Spring Actuator         | —                         |
-| Local Dev      | Docker Compose          | —                         |
+| Layer | Technology |
+|---|---|
+| Backend | Java 21 + Spring Boot 3.2 |
+| Database | MySQL 8.0 |
+| Cache | Redis 7 |
+| Security | Spring Security + JWT (jjwt) |
+| QR Code | Google ZXing 3.5 |
+| HTML Parsing | Jsoup 1.17 |
+| Frontend | React 18 + Recharts |
+| Local Infra | Docker Compose |
+| Build Tool | Maven 3.8 |
+
+---
+
+## System Architecture
+
+```
+Browser (React :3000)
+        │
+        ▼
+Spring Boot API (:8080)
+        │
+   ┌────┴──────────┐
+   ▼               ▼
+Redis :6379     MySQL :3307
+(Cache-Aside)   (Source of Truth)
+        │
+        ▼
+  url_access_logs
+  (Event Analytics)
+```
+
+**Cache-Aside Flow (every redirect):**
+```
+GET /{shortCode}
+    │
+    ├──► Redis.get("url:{code}")
+    │         │
+    │      HIT ──► return URL instantly (< 1ms)
+    │         │
+    │      MISS──► MySQL.findByShortCode()
+    │                │
+    │                ├──► validate (active? expired?)
+    │                ├──► Redis.set(key, url, TTL=24h)
+    │                └──► return URL + log access event
+    │
+    └──► Redis down? → silently fallback to DB
+```
+
+---
+
+## Project Structure
+
+```
+url-shortener/
+├── src/main/java/com/urlshortener/
+│   ├── config/
+│   │   ├── RedisConfig.java
+│   │   └── SecurityConfig.java
+│   ├── controller/
+│   │   ├── UrlController.java
+│   │   ├── AuthController.java
+│   │   ├── DashboardController.java
+│   │   └── PreviewController.java
+│   ├── dto/
+│   │   ├── UrlRequest.java
+│   │   ├── UrlResponse.java
+│   │   ├── UrlStatsResponse.java
+│   │   ├── AuthDto.java
+│   │   └── ErrorResponse.java
+│   ├── exception/
+│   │   ├── GlobalExceptionHandler.java
+│   │   ├── UrlNotFoundException.java
+│   │   ├── UrlExpiredException.java
+│   │   ├── CustomAliasAlreadyExistsException.java
+│   │   └── RateLimitExceededException.java
+│   ├── model/
+│   │   ├── Url.java
+│   │   ├── UrlAccessLog.java
+│   │   └── User.java
+│   ├── repository/
+│   │   ├── UrlRepository.java
+│   │   ├── UrlAccessLogRepository.java
+│   │   └── UserRepository.java
+│   ├── security/
+│   │   ├── JwtService.java
+│   │   ├── JwtAuthFilter.java
+│   │   └── UserDetailsServiceImpl.java
+│   ├── service/
+│   │   ├── UrlService.java
+│   │   ├── AuthService.java
+│   │   ├── DashboardService.java
+│   │   ├── RateLimitService.java
+│   │   ├── GeoLocationService.java
+│   │   ├── QrCodeService.java
+│   │   ├── LinkPreviewService.java
+│   │   └── UrlCleanupService.java
+│   ├── util/
+│   │   ├── Base62Encoder.java
+│   │   └── SnowflakeIdGenerator.java
+│   └── UrlShortenerApplication.java
+│
+├── src/main/resources/
+│   ├── application.yml
+│   └── application-prod.yml
+│
+├── src/test/java/com/urlshortener/
+│   ├── Base62EncoderTest.java
+│   ├── SnowflakeIdGeneratorTest.java
+│   ├── service/UrlServiceTest.java
+│   └── controller/UrlControllerTest.java
+│
+├── frontend/
+│   └── src/
+│       ├── App.jsx
+│       ├── components/
+│       │   ├── ShortenForm.jsx
+│       │   ├── AnalyticsDashboard.jsx
+│       │   ├── Dashboard.jsx
+│       │   ├── AuthPage.jsx
+│       │   └── PreviewPage.jsx
+│       └── services/api.js
+│
+├── docs/
+│   ├── architecture.html
+│   └── plantuml/
+│       ├── 01_system_architecture.puml
+│       ├── 02_class_diagram.puml
+│       ├── 03_database_er.puml
+│       ├── 04_sequence_shorten.puml
+│       ├── 05_sequence_redirect.puml
+│       ├── 06_sequence_auth.puml
+│       ├── 07_component_diagram.puml
+│       ├── 08_state_url_lifecycle.puml
+│       └── 09_deployment_diagram.puml
+│
+├── docker-compose.yml
+├── Dockerfile
+├── nginx.conf
+├── pom.xml
+├── RESUME_POINTS.md
+├── TRADEOFFS.md
+└── .github/workflows/ci-cd.yml
+```
+
+---
+
+## Database Schema
+
+**`urls` table**
+
+| Column | Type | Notes |
+|---|---|---|
+| id | BIGINT PK | Auto-increment, used for Base62 encoding |
+| long_url | TEXT | Original URL, max 2048 chars |
+| short_code | VARCHAR(50) | UNIQUE INDEX — O(1) lookup |
+| created_at | DATETIME | Auto-set on insert |
+| expiry_time | DATETIME | Nullable — null means never expires |
+| click_count | BIGINT | Fast summary counter |
+| is_active | BOOLEAN | Soft delete flag |
+| custom_alias | VARCHAR(50) | User-defined code |
+| creator_ip | VARCHAR(45) | For rate limiting |
+| user_id | BIGINT FK | Nullable — null for anonymous users |
+
+**`url_access_logs` table**
+
+| Column | Type | Notes |
+|---|---|---|
+| id | BIGINT PK | |
+| short_code | VARCHAR(50) | Indexed |
+| accessed_at | DATETIME | Indexed |
+| ip_address | VARCHAR(45) | |
+| user_agent | VARCHAR(512) | |
+| country | VARCHAR(100) | From ip-api.com |
+| city | VARCHAR(100) | From ip-api.com |
+
+**`users` table**
+
+| Column | Type | Notes |
+|---|---|---|
+| id | BIGINT PK | |
+| email | VARCHAR(100) | UNIQUE INDEX |
+| password | VARCHAR(255) | BCrypt hashed |
+| name | VARCHAR(50) | |
+| created_at | DATETIME | |
+| is_active | BOOLEAN | |
 
 ---
 
@@ -64,238 +249,157 @@ Content-Type: application/json
 
 {
   "longUrl":     "https://example.com/very/long/url",
-  "customAlias": "my-link",         // optional
-  "expiryTime":  "2025-12-31T23:59" // optional — null = never expires
+  "customAlias": "my-link",
+  "expiryTime":  "2025-12-31T23:59"
 }
 ```
-**Response 201:**
-```json
-{
-  "shortCode": "aB3xYz",
-  "shortUrl":  "http://localhost:8080/aB3xYz",
-  "longUrl":   "https://example.com/very/long/url",
-  "createdAt": "2024-03-15T10:30:00",
-  "expiryTime": null,
-  "message":   "Short URL created successfully"
-}
-```
-
----
+Response `201 Created`
 
 ### Redirect
 ```
 GET /{shortCode}
+→ 302 Found
+→ 404 Not Found
+→ 410 Gone (expired)
 ```
-**Response:** `302 Found` → redirects to original URL
-
-- Uses **HTTP 302** (not 301) — prevents browser caching so every click is tracked
-- Returns `410 Gone` for expired links
-- Returns `404 Not Found` for invalid codes
-
----
 
 ### Analytics
 ```
 GET /api/stats/{shortCode}
+→ 200 OK
 ```
-**Response 200:**
-```json
-{
-  "shortCode":   "aB3xYz",
-  "shortUrl":    "http://localhost:8080/aB3xYz",
-  "longUrl":     "https://example.com/...",
-  "clickCount":  142,
-  "createdAt":   "2024-03-15T10:30:00",
-  "expiryTime":  null,
-  "isActive":    true,
-  "clicksByDay": [{ "date": "2024-03-15", "clicks": 42 }],
-  "clicksByCountry": [{ "country": "IN", "clicks": 80 }],
-  "recentClicks": [{ "ipAddress": "192.168.1.***", "accessedAt": "..." }]
-}
+
+### Link Preview
+```
+GET /api/preview/{shortCode}
+→ 200 OK with og: metadata
+```
+
+### QR Code
+```
+GET /api/qr/{shortCode}?size=300
+→ 200 OK image/png
+```
+
+### Auth
+```
+POST /api/auth/register   { name, email, password }
+POST /api/auth/login      { email, password }
+→ Both return JWT token
+```
+
+### Dashboard (JWT required)
+```
+GET    /api/my-urls
+DELETE /api/my-urls/{shortCode}
+```
+
+### Health
+```
+GET /api/health
+GET /actuator/health
 ```
 
 ---
 
-### Delete (Soft)
-```
-DELETE /api/{shortCode}
-```
-**Response:** `204 No Content`
+## Running Locally
 
-Soft-deletes the link (preserves analytics history). Evicts from Redis cache.
+### Prerequisites
+- Java 21
+- Maven 3.8+
+- Docker Desktop
+- Node.js 22+
 
----
-
-## Quick Start
-
-### Local Development (Docker — Zero Cost)
+### Start (3 terminals)
 
 ```bash
-# 1. Clone and enter project
-git clone <repo-url>
-cd url-shortener
-
-# 2. Start MySQL + Redis
+# Terminal 1 — databases
 docker-compose up -d
 
-# 3. Run the application
-./mvnw spring-boot:run
+# Terminal 2 — backend
+mvn spring-boot:run
 
-# 4. Test it
-curl -X POST http://localhost:8080/api/shorten \
-  -H "Content-Type: application/json" \
-  -d '{"longUrl": "https://www.google.com"}'
+# Terminal 3 — frontend
+cd frontend
+npm install   # first time only
+npm start
+```
+
+Open **http://localhost:3000**
+
+### Stop
+```bash
+docker-compose down
+# Ctrl+C in other terminals
 ```
 
 ---
 
-## Free-Tier Deployment (Zero Cost — Railway)
+## Running Tests
 
 ```bash
-# 1. Install Railway CLI
-npm install -g @railway/cli
-
-# 2. Login and deploy
-railway login
-railway init
-railway up
-
-# 3. Add MySQL plugin in Railway dashboard
-# 4. Add Upstash Redis (upstash.com — free 10K req/day)
-
-# 5. Set environment variables in Railway dashboard:
-#    DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD
-#    REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-#    APP_BASE_URL, SPRING_PROFILES_ACTIVE=prod
+mvn test
 ```
 
----
-
-## AWS Deployment (For Production Presentation)
-
-```bash
-# On EC2 instance (Ubuntu 22.04):
-
-# 1. Install Java
-sudo apt update && sudo apt install -y openjdk-17-jdk
-
-# 2. Upload JAR
-scp -i key.pem target/url-shortener-1.0.0.jar ubuntu@<EC2-IP>:~/
-
-# 3. Install + configure Nginx
-sudo apt install -y nginx
-sudo cp nginx.conf /etc/nginx/sites-available/url-shortener
-sudo ln -s /etc/nginx/sites-available/url-shortener /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# 4. Run app (production profile)
-java -jar url-shortener-1.0.0.jar --spring.profiles.active=prod &
-
-# 5. RDS: point DATABASE_URL to your RDS endpoint
-# 6. Upstash / ElastiCache: point REDIS_HOST accordingly
-```
+Covers:
+- `Base62EncoderTest` — 6 tests
+- `SnowflakeIdGeneratorTest` — 7 tests including concurrency test
+- `UrlServiceTest` — 11 unit tests with Mockito
+- `UrlControllerTest` — 10 MVC slice tests
 
 ---
 
 ## Key Design Decisions
 
-### Why Base62 over random/hash?
+**Why Base62 over random or hash?**
+Auto-increment ID → Base62 encoded = guaranteed collision-free. 6 characters = 56 billion unique codes. Random strings risk collisions at scale. MD5 truncation reintroduces collision risk.
 
-| Approach    | Collision Risk | Length | Complexity |
-|-------------|----------------|--------|------------|
-| Random      | Yes (grows with scale) | 6-8 chars | Simple |
-| MD5/SHA     | Low but present | Long (must truncate) | Medium |
-| **Base62 from ID** | **Zero** | **6 chars** | **Simple** |
+**Why HTTP 302 not 301?**
+301 is permanent — browsers cache it forever. After the first visit, subsequent clicks never reach the server, completely breaking click analytics. 302 ensures every click is tracked.
 
-Base62 encodes the auto-incremented DB primary key. Same ID → same code. Mathematically collision-free.
+**Why soft delete?**
+Hard deleting a URL destroys all associated `url_access_logs`. Soft delete (`is_active = false`) stops future redirects while preserving full analytics history.
 
-### Why HTTP 302, not 301?
-- **301 Permanent**: Browser caches redirect. Subsequent clicks never hit your server — analytics break.
-- **302 Temporary**: Every click hits the server. Accurate click counting. ✅
+**Why a separate `url_access_logs` table?**
+`click_count` is a fast integer for displaying totals. `url_access_logs` stores full event data — needed to answer questions like "how many clicks from India last week?" A single counter cannot do this.
 
-### Why soft-delete?
-Deleting a URL row would destroy all associated analytics in `url_access_logs`.
-Setting `is_active = false` preserves the history while preventing future redirects.
+**Why Redis-based rate limiting?**
+In-memory rate limiting breaks with multiple app instances — each has its own counter. Redis is shared, so limits apply globally regardless of how many instances are running.
 
-### Fault tolerance: Redis failure
+**Redis fault tolerance:**
 ```java
 try {
     return redisTemplate.opsForValue().get("url:" + shortCode);
 } catch (Exception e) {
-    log.warn("Redis unavailable — falling back to DB");
-    return null;   // triggers DB lookup
+    return null; // silently fall through to DB
 }
 ```
-Redis going down **never crashes the redirect**. The service degrades gracefully to DB-only mode.
+Redis failure never crashes redirects. Service degrades gracefully.
 
 ---
 
-## Scalability Strategy
+## UML Diagrams
 
-- **Stateless backend**: No session data in the app. Any number of instances can run in parallel.
-- **Horizontal scaling**: Add EC2 instances behind a load balancer. All share one RDS + one Redis.
-- **Redis as shared cache**: Consistent cache state across all app instances.
-- **DB indexing**: `shortCode` has a unique index — O(1) lookup regardless of table size.
-- **Atomic click counter**: `UPDATE ... SET click_count = click_count + 1` is atomic in MySQL. No race conditions.
+All diagrams in `docs/plantuml/`. Paste any `.puml` file contents at **https://www.plantuml.com/plantuml/uml**
 
----
-
-## Project Structure
-
-```
-url-shortener/
-├── src/main/java/com/urlshortener/
-│   ├── UrlShortenerApplication.java
-│   ├── config/
-│   │   └── RedisConfig.java
-│   ├── controller/
-│   │   └── UrlController.java
-│   ├── dto/
-│   │   ├── ErrorResponse.java
-│   │   ├── UrlRequest.java
-│   │   ├── UrlResponse.java
-│   │   └── UrlStatsResponse.java
-│   ├── exception/
-│   │   ├── CustomAliasAlreadyExistsException.java
-│   │   ├── GlobalExceptionHandler.java
-│   │   ├── RateLimitExceededException.java
-│   │   ├── UrlExpiredException.java
-│   │   └── UrlNotFoundException.java
-│   ├── model/
-│   │   ├── Url.java
-│   │   └── UrlAccessLog.java
-│   ├── repository/
-│   │   ├── UrlAccessLogRepository.java
-│   │   └── UrlRepository.java
-│   ├── service/
-│   │   ├── RateLimitService.java
-│   │   ├── UrlCleanupService.java
-│   │   └── UrlService.java
-│   └── util/
-│       └── Base62Encoder.java
-├── src/main/resources/
-│   ├── application.yml
-│   └── application-prod.yml
-├── src/test/java/com/urlshortener/
-│   └── Base62EncoderTest.java
-├── docker-compose.yml
-├── nginx.conf
-├── deploy.sh
-├── .env.example
-└── pom.xml
-```
-
----
-
-## Documentation Index
-
-| File | What's inside |
+| Diagram | File |
 |---|---|
-| `README.md` | Project overview, API reference, quick start |
-| `DEPLOYMENT.md` | Step-by-step Railway (free) + AWS EC2 deployment |
-| `TRADEOFFS.md` | Every design decision explained with alternatives |
-| `RESUME_POINTS.md` | Copy-paste resume bullets + 10 interview Q&As |
-| `docs/architecture.html` | Visual architecture diagram (open in browser) |
-| `URL-Shortener.postman_collection.json` | Import into Postman — 11 ready-to-run requests |
-| `docker-compose.yml` | Spin up MySQL + Redis locally in one command |
-| `.env.example` | All environment variables documented |
+| System Architecture | `01_system_architecture.puml` |
+| Class Diagram | `02_class_diagram.puml` |
+| Database ER | `03_database_er.puml` |
+| Shorten URL Sequence | `04_sequence_shorten.puml` |
+| Redirect + Cache-Aside Sequence | `05_sequence_redirect.puml` |
+| JWT Auth Sequence | `06_sequence_auth.puml` |
+| Component Diagram | `07_component_diagram.puml` |
+| URL Lifecycle State | `08_state_url_lifecycle.puml` |
+| Deployment Diagram | `09_deployment_diagram.puml` |
+
+---
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| `RESUME_POINTS.md` | 20 resume bullet points + 10 interview Q&As |
+| `TRADEOFFS.md` | Every design decision with alternatives considered |
+| `docs/architecture.html` | Visual architecture diagram — open in browser |
